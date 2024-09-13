@@ -1,8 +1,10 @@
 import {
+  ActionError,
   ActionGetResponse,
   ActionPostRequest,
   ActionPostResponse,
   ACTIONS_CORS_HEADERS,
+  createActionHeaders,
   createPostResponse,
   MEMO_PROGRAM_ID,
 } from "@solana/actions";
@@ -10,70 +12,104 @@ import {
   clusterApiUrl,
   ComputeBudgetProgram,
   Connection,
+  LAMPORTS_PER_SOL,
   PublicKey,
+  SystemProgram,
   Transaction,
   TransactionInstruction,
 } from "@solana/web3.js";
-
+const headers = createActionHeaders();
 export const GET = async (req: Request) => {
-  console.log(req);
-  const payload: ActionGetResponse = {
-    icon: new URL(
-      "/https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRLjRzgecAbQoFNztoEi8G5fmZJHwoE2FhPig&s"
-    ).toString(),
-    label: "Enter Raffle",
-    description: "This is a super simple action",
-    title: "Rafflinks Demo #1",
-  };
-  return Response.json(payload, {
-    headers: ACTIONS_CORS_HEADERS,
-  });
+  try {
+    const payload: ActionGetResponse = {
+      icon: new URL("/img/cat.webp", new URL(req.url).origin).toString(),
+      description: "Buy me a coffee",
+      title: "My demo blink",
+      label: "Pay",
+    };
+    return Response.json(payload, { headers: ACTIONS_CORS_HEADERS });
+  } catch (err) {
+    Response.json(
+      { message: err, status: 400 },
+      { headers: ACTIONS_CORS_HEADERS }
+    );
+  }
 };
 
-export const OPTIONS = GET;
+export const OPTIONS = async () => Response.json(null, { headers });
 
 export const POST = async (req: Request) => {
   try {
     const body: ActionPostRequest = await req.json();
 
-    //check if its a correct pubkey or not
     let account: PublicKey;
     try {
       account = new PublicKey(body.account);
-    } catch (error) {
-      return new Response("Invalid account provided", {
-        status: 40,
-        headers: ACTIONS_CORS_HEADERS,
-      });
+    } catch (err) {
+      throw 'Invalid "account" provided';
     }
 
-    const transaction = new Transaction();
-    transaction.add(
-      ComputeBudgetProgram.setComputeUnitPrice({
-        microLamports: 1000,
-      }),
-      new TransactionInstruction({
-        programId: new PublicKey(MEMO_PROGRAM_ID),
-        data: Buffer.from("This is a simple memo message", "utf8"),
-        keys: [],
+    const connection = new Connection(
+      process.env.SOLANA_RPC! || clusterApiUrl("devnet")
+    );
+
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: account,
+        toPubkey: new PublicKey("BmxKXa8E6of2kDJMDnrs4NNdiZ6fbtGTYhvN4EyJcHme"),
+        lamports: 0.001 * LAMPORTS_PER_SOL,
       })
     );
 
+    // set the end user as the fee payer
     transaction.feePayer = account;
-    const connection = new Connection(clusterApiUrl("devnet"));
+
     transaction.recentBlockhash = (
       await connection.getLatestBlockhash()
     ).blockhash;
 
     const payload: ActionPostResponse = await createPostResponse({
-      fields: { transaction },
+      fields: {
+        transaction,
+        message: "Successfully sent the amount",
+      },
     });
 
-    return Response.json(payload, { headers: ACTIONS_CORS_HEADERS });
-  } catch (error) {
-    Response.json({
-      msg: error,
+    return Response.json(payload, {
+      headers,
+    });
+  } catch (err) {
+    console.log(err);
+    const actionError: ActionError = { message: "An unknown error occurred" };
+    if (typeof err == "string") actionError.message = err;
+    return Response.json(actionError, {
       status: 400,
+      headers,
     });
   }
 };
+
+// const connection = new Connection(clusterApiUrl("devnet"));
+// const SendSolinstruction = SystemProgram.transfer({
+//   fromPubkey: account,
+//   toPubkey: new PublicKey("BmxKXa8E6of2kDJMDnrs4NNdiZ6fbtGTYhvN4EyJcHme"),
+//   lamports: 0.001 * LAMPORTS_PER_SOL,
+// });
+// const { blockhash, lastValidBlockHeight } =
+//   await connection.getLatestBlockhash();
+// console.log(
+//   `Our blockhash is ${blockhash} and the last Valid BlockHeight is ${lastValidBlockHeight}`
+// );
+// const transaction = new Transaction({
+//   feePayer: account,
+//   blockhash,
+//   lastValidBlockHeight,
+// });
+// transaction.add(SendSolinstruction);
+
+// const payload: ActionPostResponse = await createPostResponse({
+//   fields: {
+//     transaction,
+//     message: "Raffle successfully entered",
+//   },
+// });
