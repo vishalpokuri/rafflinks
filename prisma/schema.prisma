@@ -1,0 +1,42 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             Int          @id @default(autoincrement())
+  username       String       @unique
+  walletAddress  String       @unique
+  createdRaffles Raffle[]     @relation("createdRaffles")
+  joinedRaffles  RaffleJoin[]
+}
+
+model Raffle {
+  id           Int          @id @default(autoincrement())
+  title        String
+  description  String
+  creator      User         @relation("createdRaffles", fields: [creatorId], references: [id])
+  creatorId    Int
+  bornAt       DateTime     @default(now())
+  participants RaffleJoin[]
+}
+
+model RaffleJoin {
+  userId   Int
+  raffleId Int
+  joinedAt DateTime @default(now())
+  user     User     @relation(fields: [userId], references: [id])
+  raffle   Raffle   @relation(fields: [raffleId], references: [id])
+
+  @@id([userId, raffleId]) // Composite primary key to avoid duplicate entries
+}
